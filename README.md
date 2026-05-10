@@ -17,6 +17,7 @@ import plystra "github.com/plystra/go-plystra"
 
 client := plystra.NewClient("http://localhost:8080")
 _, _ = client.Auth.Login(ctx, "alice@example.com", "plystra-demo")
+_, _ = client.Auth.Refresh(ctx, "") // Uses the stored refresh token and persists the rotated token pair.
 decision, err := client.Authz.Check(ctx, plystra.AuthzCheckInput{
     Actor: plystra.ActorContext{
         UserID: "user_alice",
@@ -31,3 +32,5 @@ decision, err := client.Authz.Check(ctx, plystra.AuthzCheckInput{
 ```
 
 Non-public endpoints require a Bearer session whose user has an active admin grant.
+
+Core rotates refresh tokens. Keep `client.Tokens()` in your server-side encrypted session store after `Login` and `Refresh`; pass the stored values back with `WithAccessToken` and `WithRefreshToken` when creating a client for the next request.

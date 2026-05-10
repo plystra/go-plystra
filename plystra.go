@@ -56,8 +56,10 @@ func (e APIError) Error() string {
 type Client struct {
 	BaseURL        string
 	AccessToken    string
+	RefreshToken   string
 	HTTPClient     *http.Client
 	DefaultHeaders http.Header
+	UserAgent      string
 
 	System          SystemService
 	Authz           AuthzService
@@ -87,6 +89,10 @@ func WithAccessToken(token string) ClientOption {
 	return func(c *Client) { c.AccessToken = token }
 }
 
+func WithRefreshToken(token string) ClientOption {
+	return func(c *Client) { c.RefreshToken = token }
+}
+
 func WithHTTPClient(httpClient *http.Client) ClientOption {
 	return func(c *Client) {
 		if httpClient != nil {
@@ -104,11 +110,16 @@ func WithHeader(key, value string) ClientOption {
 	}
 }
 
+func WithUserAgent(userAgent string) ClientOption {
+	return func(c *Client) { c.UserAgent = userAgent }
+}
+
 func NewClient(baseURL string, opts ...ClientOption) *Client {
 	c := &Client{
 		BaseURL:        strings.TrimRight(baseURL, "/"),
 		HTTPClient:     &http.Client{Timeout: 10 * time.Second},
 		DefaultHeaders: http.Header{},
+		UserAgent:      "go-plystra/1.0.0",
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -138,6 +149,19 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 
 func (c *Client) SetAccessToken(token string) {
 	c.AccessToken = token
+}
+
+func (c *Client) SetRefreshToken(token string) {
+	c.RefreshToken = token
+}
+
+func (c *Client) SetTokens(accessToken, refreshToken string) {
+	c.AccessToken = accessToken
+	c.RefreshToken = refreshToken
+}
+
+func (c *Client) Tokens() (accessToken, refreshToken string) {
+	return c.AccessToken, c.RefreshToken
 }
 
 type ActorContext struct {
@@ -197,27 +221,32 @@ func (s SystemService) Ready(ctx context.Context) (Map, error) {
 func (s AuthService) Login(ctx context.Context, email, password string) (Map, error) {
 	out, err := s.client.postMap(ctx, "/api/v1/auth/login", Map{"email": email, "password": password})
 	if err == nil {
-		if token, ok := out["access_token"].(string); ok {
-			s.client.AccessToken = token
-		}
+		s.client.storeTokens(out)
 	}
 	return out, err
 }
 
 func (s AuthService) Refresh(ctx context.Context, refreshToken string) (Map, error) {
+	if refreshToken == "" {
+		refreshToken = s.client.RefreshToken
+	}
+	if refreshToken == "" {
+		return nil, fmt.Errorf("plystra: refresh token is required")
+	}
 	out, err := s.client.postMap(ctx, "/api/v1/auth/refresh", Map{"refresh_token": refreshToken})
 	if err == nil {
-		if token, ok := out["access_token"].(string); ok {
-			s.client.AccessToken = token
-		}
+		s.client.storeTokens(out)
 	}
 	return out, err
 }
 
 func (s AuthService) Logout(ctx context.Context, refreshToken string) (Map, error) {
+	if refreshToken == "" {
+		refreshToken = s.client.RefreshToken
+	}
 	out, err := s.client.postMap(ctx, "/api/v1/auth/logout", Map{"refresh_token": refreshToken})
 	if err == nil {
-		s.client.AccessToken = ""
+		s.client.SetTokens("", "")
 	}
 	return out, err
 }
@@ -602,6 +631,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	if c.UserAgent != "" && req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", c.UserAgent)
+	}
 	if c.AccessToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.AccessToken)
 	}
@@ -611,30 +643,44 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	}
 	defer resp.Body.Close()
 
-	var envelope struct {
-		Data  json.RawMessage `json:"data"`
-		Error *ErrorBody      `json:"error"`
-		Meta  Map             `json:"meta"`
+	raw, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return readErr
 	}
-	decoder := json.NewDecoder(resp.Body)
+	if len(raw) == 0 && resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+
+	var envelope struct {
+		Data      json.RawMessage `json:"data"`
+		Error     *ErrorBody      `json:"error"`
+		RequestID string          `json:"request_id"`
+		Meta      Map             `json:"meta"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	if err := decoder.Decode(&envelope); err != nil {
-		if resp.StatusCode == http.StatusNoContent {
-			return nil
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Code:       "INVALID_JSON_RESPONSE",
+			Message:    fmt.Sprintf("Plystra returned non-JSON response with HTTP %d", resp.StatusCode),
+			Details:    string(raw),
 		}
-		return err
 	}
 	if envelope.Error != nil || resp.StatusCode >= 400 {
 		if envelope.Error == nil {
-			return APIError{StatusCode: resp.StatusCode, Code: "HTTP_ERROR", Message: http.StatusText(resp.StatusCode)}
+			return &APIError{StatusCode: resp.StatusCode, Code: "HTTP_ERROR", Message: http.StatusText(resp.StatusCode), RequestID: envelope.RequestID}
 		}
 		requestID := envelope.Error.RequestID
+		if requestID == "" {
+			requestID = envelope.RequestID
+		}
 		if requestID == "" {
 			if value, ok := envelope.Meta["request_id"].(string); ok {
 				requestID = value
 			}
 		}
-		return APIError{
+		return &APIError{
 			StatusCode: resp.StatusCode,
 			Code:       envelope.Error.Code,
 			Message:    envelope.Error.Message,
@@ -648,6 +694,15 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		return nil
 	}
 	return json.Unmarshal(envelope.Data, out)
+}
+
+func (c *Client) storeTokens(data Map) {
+	if token, ok := data["access_token"].(string); ok {
+		c.AccessToken = token
+	}
+	if token, ok := data["refresh_token"].(string); ok {
+		c.RefreshToken = token
+	}
 }
 
 func withQuery(path string, query Query) string {
