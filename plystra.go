@@ -57,6 +57,7 @@ type Client struct {
 	BaseURL        string
 	AccessToken    string
 	RefreshToken   string
+	APIKey         string
 	HTTPClient     *http.Client
 	DefaultHeaders http.Header
 	UserAgent      string
@@ -67,6 +68,7 @@ type Client struct {
 	Auth            AuthService
 	Actor           ActorService
 	Admin           AdminService
+	APIKeys         APIKeysService
 	Users           UsersService
 	Spaces          SpacesService
 	Groups          GroupsService
@@ -91,6 +93,10 @@ func WithAccessToken(token string) ClientOption {
 
 func WithRefreshToken(token string) ClientOption {
 	return func(c *Client) { c.RefreshToken = token }
+}
+
+func WithAPIKey(apiKey string) ClientOption {
+	return func(c *Client) { c.APIKey = apiKey }
 }
 
 func WithHTTPClient(httpClient *http.Client) ClientOption {
@@ -130,6 +136,7 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 	c.Auth = AuthService{client: c}
 	c.Actor = ActorService{client: c}
 	c.Admin = AdminService{client: c}
+	c.APIKeys = APIKeysService{client: c}
 	c.Users = UsersService{client: c}
 	c.Spaces = SpacesService{client: c}
 	c.Groups = GroupsService{client: c}
@@ -153,6 +160,10 @@ func (c *Client) SetAccessToken(token string) {
 
 func (c *Client) SetRefreshToken(token string) {
 	c.RefreshToken = token
+}
+
+func (c *Client) SetAPIKey(apiKey string) {
+	c.APIKey = apiKey
 }
 
 func (c *Client) SetTokens(accessToken, refreshToken string) {
@@ -193,6 +204,7 @@ type AuditService struct{ client *Client }
 type AuthService struct{ client *Client }
 type ActorService struct{ client *Client }
 type AdminService struct{ client *Client }
+type APIKeysService struct{ client *Client }
 type UsersService struct{ client *Client }
 type SpacesService struct{ client *Client }
 type GroupsService struct{ client *Client }
@@ -277,6 +289,22 @@ func (s AdminService) CreateGrant(ctx context.Context, input Map) (Map, error) {
 
 func (s AdminService) RevokeGrant(ctx context.Context, grantID string, input Map) (Map, error) {
 	return s.client.postMap(ctx, "/api/v1/admin/grants/"+esc(grantID)+"/revoke", input)
+}
+
+func (s APIKeysService) List(ctx context.Context, query Query) ([]Map, error) {
+	return s.client.getList(ctx, "/api/v1/api-keys", query)
+}
+
+func (s APIKeysService) Create(ctx context.Context, input Map) (Map, error) {
+	return s.client.postMap(ctx, "/api/v1/api-keys", input)
+}
+
+func (s APIKeysService) Get(ctx context.Context, apiKeyID string) (Map, error) {
+	return s.client.getMap(ctx, "/api/v1/api-keys/"+esc(apiKeyID), nil)
+}
+
+func (s APIKeysService) Revoke(ctx context.Context, apiKeyID string, input Map) (Map, error) {
+	return s.client.postMap(ctx, "/api/v1/api-keys/"+esc(apiKeyID)+"/revoke", input)
 }
 
 func (s AuthzService) Check(ctx context.Context, input AuthzCheckInput) (Map, error) {
@@ -633,6 +661,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	}
 	if c.UserAgent != "" && req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", c.UserAgent)
+	}
+	if c.APIKey != "" {
+		req.Header.Set("X-Plystra-API-Key", c.APIKey)
 	}
 	if c.AccessToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.AccessToken)

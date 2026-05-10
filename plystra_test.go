@@ -110,6 +110,42 @@ func TestClientListUsesQueryAndAPIErrorCarriesDetails(t *testing.T) {
 	}
 }
 
+func TestClientSendsAPIKeyAndRoutesAPIKeysModule(t *testing.T) {
+	var seenAPIKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seenAPIKey = r.Header.Get("X-Plystra-API-Key")
+		switch r.URL.Path {
+		case "/api/v1/authz/check":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"decision": "allow"}})
+		case "/api/v1/api-keys":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": "ak_test"}}})
+		default:
+			t.Fatalf("unexpected route: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, WithAPIKey("ply_ak_test.secret"))
+	decision, err := client.Authz.Check(context.Background(), AuthzCheckInput{Action: "approve"})
+	if err != nil {
+		t.Fatalf("authz check: %v", err)
+	}
+	if decision["decision"] != "allow" {
+		t.Fatalf("decision = %#v", decision)
+	}
+	keys, err := client.APIKeys.List(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("api keys list: %v", err)
+	}
+	if len(keys) != 1 || keys[0]["id"] != "ak_test" {
+		t.Fatalf("api keys = %#v", keys)
+	}
+	if seenAPIKey != "ply_ak_test.secret" {
+		t.Fatalf("X-Plystra-API-Key = %q", seenAPIKey)
+	}
+}
+
 func TestClientWrapsInvalidJSONResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)

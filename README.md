@@ -12,6 +12,15 @@ go get github.com/plystra/go-plystra
 
 ## Usage
 
+For production services, prefer a scoped API key or a server-side access token issued by your frontend/gateway session. Keep password login for admin tools and bootstrap flows.
+
+```go
+client := plystra.NewClient(
+	"https://plystra.internal",
+	plystra.WithAPIKey(os.Getenv("PLYSTRA_API_KEY")),
+)
+```
+
 ```go
 import plystra "github.com/plystra/go-plystra"
 
@@ -31,6 +40,6 @@ decision, err := client.Authz.Check(ctx, plystra.AuthzCheckInput{
 })
 ```
 
-Non-public endpoints require a Bearer session whose user has an active admin grant.
+Non-public endpoints require either a Bearer session whose user has an active admin grant or a scoped API key with matching permission keys.
 
 Core rotates refresh tokens. Keep `client.Tokens()` in your server-side encrypted session store after `Login` and `Refresh`; pass the stored values back with `WithAccessToken` and `WithRefreshToken` when creating a client for the next request.
