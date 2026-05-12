@@ -6,13 +6,13 @@ import (
 )
 
 func (s SystemService) Version(ctx context.Context) (Map, error) {
-	return s.client.getMap(ctx, "/api/v1/system/version", nil)
+	return s.client.getMap(ctx, "/api/v1/version", nil)
 }
 func (s SystemService) Health(ctx context.Context) (Map, error) {
-	return s.client.getMap(ctx, "/api/v1/system/health", nil)
+	return s.client.getMap(ctx, "/api/v1/health", nil)
 }
 func (s SystemService) Ready(ctx context.Context) (Map, error) {
-	return s.client.getMap(ctx, "/api/v1/system/ready", nil)
+	return s.client.getMap(ctx, "/api/v1/ready", nil)
 }
 
 func (s AuthService) Login(ctx context.Context, email, password string) (Map, error) {

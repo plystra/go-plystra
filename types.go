@@ -19,7 +19,6 @@ type Envelope[T any] struct {
 	Error      *ErrorBody  `json:"error,omitempty"`
 	Pagination *Pagination `json:"pagination,omitempty"`
 	RequestID  string      `json:"request_id,omitempty"`
-	Meta       Map         `json:"meta,omitempty"`
 }
 
 type ErrorBody struct {
@@ -54,14 +53,10 @@ type ActorContext struct {
 }
 
 type AuthzCheckInput struct {
-	Actor             *ActorContext `json:"actor,omitempty"`
-	ActorUserID       string        `json:"actor_user_id,omitempty"`
-	ActorMemberID     string        `json:"actor_member_id,omitempty"`
-	ActorUserMemberID string        `json:"actor_user_member_id,omitempty"`
-	SpaceID           string        `json:"space_id,omitempty"`
-	ResourceType      string        `json:"resource_type,omitempty"`
-	ResourceID        string        `json:"resource_id,omitempty"`
-	Resource          *struct {
+	Actor        *ActorContext `json:"actor,omitempty"`
+	ResourceType string        `json:"resource_type,omitempty"`
+	ResourceID   string        `json:"resource_id,omitempty"`
+	Resource     *struct {
 		Type string `json:"type,omitempty"`
 		ID   string `json:"id,omitempty"`
 	} `json:"resource,omitempty"`

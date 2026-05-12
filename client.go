@@ -84,7 +84,7 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		BaseURL:        strings.TrimRight(baseURL, "/"),
 		HTTPClient:     &http.Client{Timeout: 10 * time.Second},
 		DefaultHeaders: http.Header{},
-		UserAgent:      "go-plystra/1.0.0-dev10",
+		UserAgent:      "go-plystra/1.0.0-dev11",
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -213,7 +213,6 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		Data      json.RawMessage `json:"data"`
 		Error     *ErrorBody      `json:"error"`
 		RequestID string          `json:"request_id"`
-		Meta      Map             `json:"meta"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
@@ -232,11 +231,6 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		requestID := envelope.Error.RequestID
 		if requestID == "" {
 			requestID = envelope.RequestID
-		}
-		if requestID == "" {
-			if value, ok := envelope.Meta["request_id"].(string); ok {
-				requestID = value
-			}
 		}
 		return &APIError{
 			StatusCode: resp.StatusCode,

@@ -21,6 +21,8 @@ client := plystra.NewClient(
 )
 ```
 
+`Authz.Check` may omit `Actor` when using an access token; Core uses the token's active actor. API key calls must pass `Actor` explicitly.
+
 ```go
 import plystra "github.com/plystra/go-plystra"
 
@@ -28,15 +30,15 @@ client := plystra.NewClient("http://localhost:8080")
 _, _ = client.Auth.Login(ctx, "alice@example.com", "plystra-demo")
 _, _ = client.Auth.Refresh(ctx, "") // Uses the stored refresh token and persists the rotated token pair.
 decision, err := client.Authz.Check(ctx, plystra.AuthzCheckInput{
-    Actor: plystra.ActorContext{
-        UserID: "user_alice",
-        SpaceID: "space_acme",
-        MemberID: "member_finance_reviewer",
-        UserMemberID: "um_alice_finance_reviewer",
-    },
-    ResourceType: "invoice",
-    ResourceID: "invoice_001",
-    Action: "approve",
+	Actor: &plystra.ActorContext{
+		UserID:       "user_alice",
+		SpaceID:      "space_acme",
+		MemberID:     "member_finance_reviewer",
+		UserMemberID: "um_alice_finance_reviewer",
+	},
+	ResourceType: "invoice",
+	ResourceID:   "invoice_001",
+	Action:       "approve",
 })
 ```
 
