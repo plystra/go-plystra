@@ -46,6 +46,10 @@ type Client struct {
 
 type ClientOption func(*Client)
 
+type contextKey string
+
+const requestIDContextKey contextKey = "plystra_request_id"
+
 func WithAccessToken(token string) ClientOption {
 	return func(c *Client) { c.AccessToken = token }
 }
@@ -79,12 +83,24 @@ func WithUserAgent(userAgent string) ClientOption {
 	return func(c *Client) { c.UserAgent = userAgent }
 }
 
+func WithRequestID(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, requestIDContextKey, requestID)
+}
+
+func RequestIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	value, _ := ctx.Value(requestIDContextKey).(string)
+	return value
+}
+
 func NewClient(baseURL string, opts ...ClientOption) *Client {
 	c := &Client{
 		BaseURL:        strings.TrimRight(baseURL, "/"),
 		HTTPClient:     &http.Client{Timeout: 10 * time.Second},
 		DefaultHeaders: http.Header{},
-		UserAgent:      "go-plystra/1.0.0-dev12",
+		UserAgent:      "go-plystra/1.0.0-dev13",
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -188,6 +204,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	}
 	if c.UserAgent != "" && req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", c.UserAgent)
+	}
+	if requestID := RequestIDFromContext(ctx); requestID != "" && req.Header.Get("X-Request-ID") == "" {
+		req.Header.Set("X-Request-ID", requestID)
 	}
 	if c.APIKey != "" {
 		req.Header.Set("X-Plystra-API-Key", c.APIKey)

@@ -146,6 +146,30 @@ func TestClientSendsAPIKeyAndRoutesAPIKeysModule(t *testing.T) {
 	}
 }
 
+func TestClientSendsRequestIDFromContext(t *testing.T) {
+	var seenRequestID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seenRequestID = r.Header.Get("X-Request-ID")
+		switch r.URL.Path {
+		case "/api/v1/health":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"status": "ok"}})
+		default:
+			t.Fatalf("unexpected route: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	ctx := WithRequestID(context.Background(), "req_go_test")
+	if _, err := client.System.Health(ctx); err != nil {
+		t.Fatalf("health: %v", err)
+	}
+	if seenRequestID != "req_go_test" {
+		t.Fatalf("X-Request-ID = %q", seenRequestID)
+	}
+}
+
 func TestClientWrapsInvalidJSONResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)

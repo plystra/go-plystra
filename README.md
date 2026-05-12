@@ -21,6 +21,17 @@ client := plystra.NewClient(
 )
 ```
 
+Attach an application request id to every call through the Go context:
+
+```go
+ctx = plystra.WithRequestID(ctx, "req_01HY...")
+decision, err := client.Authz.Check(ctx, plystra.AuthzCheckInput{
+	ResourceType: "invoice",
+	ResourceID:   "invoice_001",
+	Action:       "approve",
+})
+```
+
 `Authz.Check` may omit `Actor` when using an access token; Core uses the token's active actor. API key calls must pass `Actor` explicitly.
 
 ```go
