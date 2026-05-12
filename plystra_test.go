@@ -110,6 +110,39 @@ func TestClientListUsesQueryAndAPIErrorCarriesDetails(t *testing.T) {
 	}
 }
 
+func TestClientRegisterStoresTokens(t *testing.T) {
+	var seenBody Map
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/api/v1/auth/register" {
+			t.Fatalf("unexpected route: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&seenBody); err != nil {
+			t.Fatalf("register body: %v", err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"access_token": "register-token", "refresh_token": "register-refresh"}})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	if _, err := client.Auth.Register(context.Background(), Map{
+		"email":              "founder@example.com",
+		"password":           "long-enough-password",
+		"space_name":         "Founder Space",
+		"registration_token": "registration-token",
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	accessToken, refreshToken := client.Tokens()
+	if accessToken != "register-token" || refreshToken != "register-refresh" {
+		t.Fatalf("tokens = %q %q", accessToken, refreshToken)
+	}
+	if seenBody["space_name"] != "Founder Space" {
+		t.Fatalf("register body = %#v", seenBody)
+	}
+}
+
 func TestClientSendsAPIKeyAndRoutesAPIKeysModule(t *testing.T) {
 	var seenAPIKey string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

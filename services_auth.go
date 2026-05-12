@@ -23,6 +23,14 @@ func (s AuthService) Login(ctx context.Context, email, password string) (Map, er
 	return out, err
 }
 
+func (s AuthService) Register(ctx context.Context, input Map) (Map, error) {
+	out, err := s.client.postMap(ctx, "/api/v1/auth/register", input)
+	if err == nil {
+		s.client.storeTokens(out)
+	}
+	return out, err
+}
+
 func (s AuthService) Refresh(ctx context.Context, refreshToken string) (Map, error) {
 	if refreshToken == "" {
 		refreshToken = s.client.RefreshToken

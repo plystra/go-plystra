@@ -56,3 +56,14 @@ decision, err := client.Authz.Check(ctx, plystra.AuthzCheckInput{
 Non-public endpoints require either a Bearer session whose user has an active admin grant or a scoped API key with matching permission keys.
 
 Core rotates refresh tokens. Keep `client.Tokens()` in your server-side encrypted session store after `Login` and `Refresh`; pass the stored values back with `WithAccessToken` and `WithRefreshToken` when creating a client for the next request.
+
+Registration is disabled by default in Core. When an operator enables it and provides a registration token, `Auth.Register` creates the user/session and stores the returned token pair:
+
+```go
+_, err := client.Auth.Register(ctx, plystra.Map{
+	"email":              "founder@example.com",
+	"password":           "long-enough-password",
+	"space_name":         "Founder Space",
+	"registration_token": registrationToken,
+})
+```
