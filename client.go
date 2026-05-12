@@ -84,7 +84,7 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		BaseURL:        strings.TrimRight(baseURL, "/"),
 		HTTPClient:     &http.Client{Timeout: 10 * time.Second},
 		DefaultHeaders: http.Header{},
-		UserAgent:      "go-plystra/1.0.0-dev11",
+		UserAgent:      "go-plystra/1.0.0-dev12",
 	}
 	for _, opt := range opts {
 		opt(c)
