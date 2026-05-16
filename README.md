@@ -34,6 +34,36 @@ decision, err := client.Authz.Check(ctx, plystra.AuthzCheckInput{
 
 `Authz.Check` may omit `Actor` when using an access token; Core uses the token's active actor. API key calls must pass `Actor` explicitly.
 
+Context Mode lets a trusted backend protect one existing business action without syncing users, organizations, or resources first:
+
+```go
+decision, err := client.Authz.Check(ctx, plystra.AuthzCheckInput{
+	Actor: &plystra.ActorContext{
+		UserID:    "user_external_alice",
+		MemberID:  "member_finance_reviewer",
+		BindingID: "binding_external_alice_finance",
+		SpaceID:   "space_acme",
+	},
+	Resource: &plystra.AuthzResourceContext{
+		Type:       "invoice",
+		ExternalID: "invoice_001",
+		SpaceID:    "space_acme",
+		GroupPath:  "finance.apac",
+	},
+	Grants: []plystra.AuthzGrantContext{{
+		RoleKey:              "finance_approver",
+		Resource:             "invoice",
+		Action:               "approve",
+		Scope:                "group_tree",
+		SpaceID:              "space_acme",
+		ScopeAnchorGroupPath: "finance",
+	}},
+	Action: "approve",
+})
+```
+
+Inline actor, resource, and grant context is API-key-only. Build it from trusted server-side session and database state, never directly from browser input.
+
 ```go
 import plystra "github.com/plystra/go-plystra"
 
@@ -54,6 +84,8 @@ decision, err := client.Authz.Check(ctx, plystra.AuthzCheckInput{
 ```
 
 Non-public endpoints require either a Bearer session whose user has an active admin grant or a scoped API key with matching permission keys.
+
+`Data`, `Plugins`, and `Templates` clients wrap preview Core metadata surfaces. Data Console is disabled by default, plugin routes do not represent a stable plugin runtime, and template routes do not represent a stable template ecosystem.
 
 Core rotates refresh tokens. Keep `client.Tokens()` in your server-side encrypted session store after `Login` and `Refresh`; pass the stored values back with `WithAccessToken` and `WithRefreshToken` when creating a client for the next request.
 

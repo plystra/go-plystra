@@ -210,8 +210,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	}
 	if c.APIKey != "" {
 		req.Header.Set("X-Plystra-API-Key", c.APIKey)
-	}
-	if c.AccessToken != "" {
+	} else if c.AccessToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.AccessToken)
 	}
 	resp, err := c.HTTPClient.Do(req)

@@ -179,6 +179,105 @@ func TestClientSendsAPIKeyAndRoutesAPIKeysModule(t *testing.T) {
 	}
 }
 
+func TestClientPrefersAPIKeyOverBearerToken(t *testing.T) {
+	var seenAPIKey string
+	var seenAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seenAPIKey = r.Header.Get("X-Plystra-API-Key")
+		seenAuth = r.Header.Get("Authorization")
+		if r.URL.Path != "/api/v1/authz/check" {
+			t.Fatalf("unexpected route: %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"decision": "allow"}})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, WithAccessToken("access-session"), WithAPIKey("ply_ak_test.secret"))
+	decision, err := client.Authz.Check(context.Background(), AuthzCheckInput{Action: "approve"})
+	if err != nil {
+		t.Fatalf("authz check: %v", err)
+	}
+	if decision["decision"] != "allow" {
+		t.Fatalf("decision = %#v", decision)
+	}
+	if seenAPIKey != "ply_ak_test.secret" {
+		t.Fatalf("X-Plystra-API-Key = %q", seenAPIKey)
+	}
+	if seenAuth != "" {
+		t.Fatalf("Authorization = %q, want empty", seenAuth)
+	}
+}
+
+func TestClientSendsAuthzContextModePayload(t *testing.T) {
+	var seenAPIKey string
+	var seenBody AuthzCheckInput
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seenAPIKey = r.Header.Get("X-Plystra-API-Key")
+		if r.URL.Path != "/api/v1/authz/check" {
+			t.Fatalf("unexpected route: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&seenBody); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
+			"decision":  "allow",
+			"allow":     true,
+			"trace_id":  "trc_test",
+			"deny_code": nil,
+		}})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, WithAPIKey("ply_ak_test.secret"))
+	decision, err := client.Authz.Check(context.Background(), AuthzCheckInput{
+		Actor: &ActorContext{
+			UserID:     "user_external_alice",
+			MemberID:   "member_finance_reviewer",
+			BindingID:  "binding_external_alice_finance",
+			SpaceID:    "space_acme",
+			UserEmail:  "alice@example.com",
+			MemberName: "Finance Reviewer",
+		},
+		Resource: &AuthzResourceContext{
+			Type:          "invoice",
+			ExternalID:    "invoice_001",
+			SpaceID:       "space_acme",
+			GroupPath:     "finance.apac",
+			OwnerMemberID: "member_invoice_creator",
+			Metadata:      Map{"amount": float64(1250)},
+		},
+		Grants: []AuthzGrantContext{{
+			RoleKey:              "finance_approver",
+			Resource:             "invoice",
+			Action:               "approve",
+			Scope:                "group_tree",
+			SpaceID:              "space_acme",
+			ScopeAnchorGroupPath: "finance",
+		}},
+		Action: "approve",
+	})
+	if err != nil {
+		t.Fatalf("authz check: %v", err)
+	}
+	if decision["decision"] != "allow" {
+		t.Fatalf("decision = %#v", decision)
+	}
+	if seenAPIKey != "ply_ak_test.secret" {
+		t.Fatalf("X-Plystra-API-Key = %q", seenAPIKey)
+	}
+	if seenBody.Actor.BindingID != "binding_external_alice_finance" {
+		t.Fatalf("binding id = %q", seenBody.Actor.BindingID)
+	}
+	if seenBody.Resource.ExternalID != "invoice_001" || seenBody.Resource.GroupPath != "finance.apac" {
+		t.Fatalf("resource = %#v", seenBody.Resource)
+	}
+	if len(seenBody.Grants) != 1 || seenBody.Grants[0].ScopeAnchorGroupPath != "finance" {
+		t.Fatalf("grants = %#v", seenBody.Grants)
+	}
+}
+
 func TestClientSendsRequestIDFromContext(t *testing.T) {
 	var seenRequestID string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -200,6 +299,79 @@ func TestClientSendsRequestIDFromContext(t *testing.T) {
 	}
 	if seenRequestID != "req_go_test" {
 		t.Fatalf("X-Request-ID = %q", seenRequestID)
+	}
+}
+
+func TestClientUsesCanonicalCoreRoutes(t *testing.T) {
+	seen := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen[r.Method+" "+r.URL.Path] = true
+		switch r.URL.Path {
+		case "/api/v1/spaces/space_acme/member-roles":
+			if r.Method == http.MethodGet {
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{}})
+			} else {
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"ok": true}})
+			}
+		case "/api/v1/plugins/com.example.payments/resources",
+			"/api/v1/plugins/com.example.payments/permissions",
+			"/api/v1/plugins/com.example.payments/audit-events",
+			"/api/v1/plugins/com.example.payments/admin-menus",
+			"/api/v1/plugins/com.example.payments/settings":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{}})
+		case "/api/v1/spaces/space_acme/member-roles/mr_finance_reviewer_approver",
+			"/api/v1/spaces/space_acme/member-roles/mr_finance_reviewer_approver/revoke":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"ok": true}})
+		default:
+			t.Fatalf("unexpected route: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	ctx := context.Background()
+	if _, err := client.Spaces.MemberRoleGrants(ctx, "space_acme", nil); err != nil {
+		t.Fatalf("space member roles: %v", err)
+	}
+	if _, err := client.MemberRoles.List(ctx, "space_acme", nil); err != nil {
+		t.Fatalf("member roles list: %v", err)
+	}
+	if _, err := client.MemberRoles.Create(ctx, "space_acme", Map{"member_id": "member_finance_reviewer", "role_id": "role_finance_approver"}); err != nil {
+		t.Fatalf("member roles create: %v", err)
+	}
+	if _, err := client.MemberRoles.Get(ctx, "space_acme", "mr_finance_reviewer_approver"); err != nil {
+		t.Fatalf("member roles get: %v", err)
+	}
+	if _, err := client.MemberRoles.Revoke(ctx, "space_acme", "mr_finance_reviewer_approver", nil); err != nil {
+		t.Fatalf("member roles revoke: %v", err)
+	}
+	if _, err := client.Plugins.Resources(ctx, "com.example.payments"); err != nil {
+		t.Fatalf("plugin resources: %v", err)
+	}
+	if _, err := client.Plugins.Permissions(ctx, "com.example.payments"); err != nil {
+		t.Fatalf("plugin permissions: %v", err)
+	}
+	if _, err := client.Plugins.AuditEvents(ctx, "com.example.payments"); err != nil {
+		t.Fatalf("plugin audit events: %v", err)
+	}
+	if _, err := client.Plugins.AdminMenu(ctx, "com.example.payments"); err != nil {
+		t.Fatalf("plugin admin menu: %v", err)
+	}
+	if _, err := client.Plugins.Settings(ctx, "com.example.payments", nil); err != nil {
+		t.Fatalf("plugin settings: %v", err)
+	}
+
+	for _, want := range []string{
+		"GET /api/v1/spaces/space_acme/member-roles",
+		"POST /api/v1/spaces/space_acme/member-roles",
+		"GET /api/v1/spaces/space_acme/member-roles/mr_finance_reviewer_approver",
+		"POST /api/v1/spaces/space_acme/member-roles/mr_finance_reviewer_approver/revoke",
+		"GET /api/v1/plugins/com.example.payments/admin-menus",
+	} {
+		if !seen[want] {
+			t.Fatalf("missing route %s; saw %#v", want, seen)
+		}
 	}
 }
 

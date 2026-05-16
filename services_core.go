@@ -55,7 +55,7 @@ func (s SpacesService) Roles(ctx context.Context, spaceID string, query Query) (
 	return s.client.getList(ctx, "/api/v1/spaces/"+esc(spaceID)+"/roles", query)
 }
 func (s SpacesService) MemberRoleGrants(ctx context.Context, spaceID string, query Query) ([]Map, error) {
-	return s.client.getList(ctx, "/api/v1/spaces/"+esc(spaceID)+"/member-role-grants", query)
+	return s.client.getList(ctx, "/api/v1/spaces/"+esc(spaceID)+"/member-roles", query)
 }
 func (s SpacesService) Resources(ctx context.Context, spaceID string, query Query) ([]Map, error) {
 	return s.client.getList(ctx, "/api/v1/spaces/"+esc(spaceID)+"/resources", query)
@@ -129,16 +129,16 @@ func (s RolesService) Disable(ctx context.Context, spaceID, roleID string, input
 }
 
 func (s MemberRolesService) List(ctx context.Context, spaceID string, query Query) ([]Map, error) {
-	return s.client.getList(ctx, "/api/v1/spaces/"+esc(spaceID)+"/member-role-grants", query)
+	return s.client.getList(ctx, "/api/v1/spaces/"+esc(spaceID)+"/member-roles", query)
 }
 func (s MemberRolesService) Create(ctx context.Context, spaceID string, input Map) (Map, error) {
-	return s.client.postMap(ctx, "/api/v1/spaces/"+esc(spaceID)+"/member-role-grants", input)
+	return s.client.postMap(ctx, "/api/v1/spaces/"+esc(spaceID)+"/member-roles", input)
 }
 func (s MemberRolesService) Get(ctx context.Context, spaceID, memberRoleID string) (Map, error) {
-	return s.client.getMap(ctx, "/api/v1/spaces/"+esc(spaceID)+"/member-role-grants/"+esc(memberRoleID), nil)
+	return s.client.getMap(ctx, "/api/v1/spaces/"+esc(spaceID)+"/member-roles/"+esc(memberRoleID), nil)
 }
 func (s MemberRolesService) Revoke(ctx context.Context, spaceID, memberRoleID string, input Map) (Map, error) {
-	return s.client.postMap(ctx, "/api/v1/spaces/"+esc(spaceID)+"/member-role-grants/"+esc(memberRoleID)+"/revoke", input)
+	return s.client.postMap(ctx, "/api/v1/spaces/"+esc(spaceID)+"/member-roles/"+esc(memberRoleID)+"/revoke", input)
 }
 
 func (s PermissionsService) List(ctx context.Context, query Query) ([]Map, error) {

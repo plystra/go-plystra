@@ -52,7 +52,7 @@ func (s PluginsService) AuditEvents(ctx context.Context, pluginID string) ([]Map
 	return s.client.getList(ctx, "/api/v1/plugins/"+esc(pluginID)+"/audit-events", nil)
 }
 func (s PluginsService) AdminMenu(ctx context.Context, pluginID string) ([]Map, error) {
-	return s.client.getList(ctx, "/api/v1/plugins/"+esc(pluginID)+"/admin-menu", nil)
+	return s.client.getList(ctx, "/api/v1/plugins/"+esc(pluginID)+"/admin-menus", nil)
 }
 func (s PluginsService) Settings(ctx context.Context, pluginID string, query Query) ([]Map, error) {
 	return s.client.getList(ctx, "/api/v1/plugins/"+esc(pluginID)+"/settings", query)
