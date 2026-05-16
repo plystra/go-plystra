@@ -88,7 +88,7 @@ type AuthzGrantContext struct {
 }
 
 type AuthzCheckInput struct {
-	Actor        *ActorContext         `json:"actor,omitempty"`
+	Actor        *ActorContext         `json:"actor"`
 	ResourceType string                `json:"resource_type,omitempty"`
 	ResourceID   string                `json:"resource_id,omitempty"`
 	Resource     *AuthzResourceContext `json:"resource,omitempty"`
@@ -100,21 +100,4 @@ type AuthzCheckInput struct {
 type SystemService struct{ client *Client }
 type AuthzService struct{ client *Client }
 type AuditService struct{ client *Client }
-type AuthService struct{ client *Client }
-type ActorService struct{ client *Client }
-type AdminService struct{ client *Client }
-type APIKeysService struct{ client *Client }
-type UsersService struct{ client *Client }
-type SpacesService struct{ client *Client }
-type GroupsService struct{ client *Client }
-type MembersService struct{ client *Client }
-type UserMembersService struct{ client *Client }
-type RolesService struct{ client *Client }
-type MemberRolesService struct{ client *Client }
-type PermissionsService struct{ client *Client }
-type RolePermissionsService struct{ client *Client }
 type ResourceTypesService struct{ client *Client }
-type ResourcesService struct{ client *Client }
-type DataService struct{ client *Client }
-type PluginsService struct{ client *Client }
-type TemplatesService struct{ client *Client }
