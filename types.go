@@ -97,7 +97,39 @@ type AuthzCheckInput struct {
 	Explain      bool                  `json:"explain,omitempty"`
 }
 
+type AuthRegisterInput struct {
+	Email             string `json:"email"`
+	Password          string `json:"password"`
+	Username          string `json:"username,omitempty"`
+	Phone             string `json:"phone,omitempty"`
+	SpaceName         string `json:"space_name,omitempty"`
+	SpaceSlug         string `json:"space_slug,omitempty"`
+	MemberDisplayName string `json:"member_display_name,omitempty"`
+	RegistrationToken string `json:"registration_token,omitempty"`
+	Metadata          Map    `json:"metadata,omitempty"`
+}
+
+type AuthLoginInput struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type AuthRefreshInput struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type AuthLogoutInput struct {
+	RefreshToken string `json:"refresh_token,omitempty"`
+}
+
+type SwitchMemberInput struct {
+	MemberID     string `json:"member_id,omitempty"`
+	UserMemberID string `json:"user_member_id,omitempty"`
+}
+
 type SystemService struct{ client *Client }
+type AuthService struct{ client *Client }
+type ActorService struct{ client *Client }
 type AuthzService struct{ client *Client }
 type AuditService struct{ client *Client }
 type ResourceTypesService struct{ client *Client }

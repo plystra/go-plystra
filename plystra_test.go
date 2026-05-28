@@ -89,6 +89,84 @@ func TestClientProtectedKernelRoutesUseAPIKey(t *testing.T) {
 	}
 }
 
+func TestClientAuthRoutesSkipConfiguredCredentials(t *testing.T) {
+	var seen [][3]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen = append(seen, [3]string{r.URL.Path, r.Header.Get("X-Plystra-API-Key"), r.Header.Get("Authorization")})
+		if r.URL.Path == "/api/v1/auth/logout" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"logged_out": true}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
+			"access_token":  "ply_at_new",
+			"refresh_token": "ply_rt_new",
+			"token_type":    "Bearer",
+		}})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, WithAPIKey("ply_kernel_secret"), WithAccessToken("ply_at_existing"))
+	if _, err := client.Auth.Register(context.Background(), AuthRegisterInput{Email: "alice@example.com", Password: "long-enough-password"}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if _, err := client.Auth.Login(context.Background(), AuthLoginInput{Email: "alice@example.com", Password: "long-enough-password"}); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if _, err := client.Auth.Refresh(context.Background(), "ply_rt_old"); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if _, err := client.Auth.Logout(context.Background(), "ply_rt_new"); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+
+	want := [][3]string{
+		{"/api/v1/auth/register", "", ""},
+		{"/api/v1/auth/login", "", ""},
+		{"/api/v1/auth/refresh", "", ""},
+		{"/api/v1/auth/logout", "", ""},
+	}
+	if len(seen) != len(want) {
+		t.Fatalf("seen = %#v", seen)
+	}
+	for i := range want {
+		if seen[i] != want[i] {
+			t.Fatalf("seen[%d] = %#v, want %#v", i, seen[i], want[i])
+		}
+	}
+}
+
+func TestClientActorRoutesPreferBearerToken(t *testing.T) {
+	var seen [][4]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen = append(seen, [4]string{r.Method, r.URL.Path, r.Header.Get("Authorization"), r.Header.Get("X-Plystra-API-Key")})
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"actor": map[string]any{"user_id": "user_alice"}}})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, WithAPIKey("ply_kernel_secret"), WithAccessToken("ply_at_session"))
+	if _, err := client.Actor.Context(context.Background()); err != nil {
+		t.Fatalf("actor context: %v", err)
+	}
+	if _, err := client.Actor.SwitchMember(context.Background(), SwitchMemberInput{UserMemberID: "um_alice"}); err != nil {
+		t.Fatalf("actor switch: %v", err)
+	}
+
+	want := [][4]string{
+		{"GET", "/api/v1/actor/context", "Bearer ply_at_session", ""},
+		{"POST", "/api/v1/actor/switch-member", "Bearer ply_at_session", ""},
+	}
+	if len(seen) != len(want) {
+		t.Fatalf("seen = %#v", seen)
+	}
+	for i := range want {
+		if seen[i] != want[i] {
+			t.Fatalf("seen[%d] = %#v, want %#v", i, seen[i], want[i])
+		}
+	}
+}
+
 func TestClientSendsAuthzContextModePayload(t *testing.T) {
 	var seenAPIKey string
 	var seenBody AuthzCheckInput

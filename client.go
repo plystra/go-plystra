@@ -15,11 +15,14 @@ import (
 type Client struct {
 	BaseURL        string
 	APIKey         string
+	AccessToken    string
 	HTTPClient     *http.Client
 	DefaultHeaders http.Header
 	UserAgent      string
 
 	System        SystemService
+	Auth          AuthService
+	Actor         ActorService
 	Authz         AuthzService
 	Audit         AuditService
 	ResourceTypes ResourceTypesService
@@ -33,6 +36,10 @@ const requestIDContextKey contextKey = "plystra_request_id"
 
 func WithAPIKey(apiKey string) ClientOption {
 	return func(c *Client) { c.APIKey = apiKey }
+}
+
+func WithAccessToken(accessToken string) ClientOption {
+	return func(c *Client) { c.AccessToken = accessToken }
 }
 
 func WithHTTPClient(httpClient *http.Client) ClientOption {
@@ -79,6 +86,8 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		opt(c)
 	}
 	c.System = SystemService{client: c}
+	c.Auth = AuthService{client: c}
+	c.Actor = ActorService{client: c}
 	c.Authz = AuthzService{client: c}
 	c.Audit = AuditService{client: c}
 	c.ResourceTypes = ResourceTypesService{client: c}
@@ -89,29 +98,70 @@ func (c *Client) SetAPIKey(apiKey string) {
 	c.APIKey = apiKey
 }
 
+func (c *Client) SetAccessToken(accessToken string) {
+	c.AccessToken = accessToken
+}
+
 func (c *Client) Request(ctx context.Context, method, path string, body any, out any) error {
-	return c.do(ctx, method, path, body, out, false)
+	return c.do(ctx, method, path, body, out, authModeDefault)
+}
+
+func (c *Client) RequestWithBearer(ctx context.Context, method, path string, body any, out any) error {
+	return c.do(ctx, method, path, body, out, authModeBearer)
 }
 
 func (c *Client) getMap(ctx context.Context, path string, query Query, skipAuth bool) (Map, error) {
 	var out Map
-	err := c.do(ctx, http.MethodGet, withQuery(path, query), nil, &out, skipAuth)
+	err := c.do(ctx, http.MethodGet, withQuery(path, query), nil, &out, boolAuthMode(skipAuth))
+	return out, err
+}
+
+func (c *Client) getBearerMap(ctx context.Context, path string, query Query) (Map, error) {
+	var out Map
+	err := c.do(ctx, http.MethodGet, withQuery(path, query), nil, &out, authModeBearer)
 	return out, err
 }
 
 func (c *Client) getList(ctx context.Context, path string, query Query) ([]Map, error) {
 	var out []Map
-	err := c.do(ctx, http.MethodGet, withQuery(path, query), nil, &out, false)
+	err := c.do(ctx, http.MethodGet, withQuery(path, query), nil, &out, authModeDefault)
 	return out, err
 }
 
 func (c *Client) postMap(ctx context.Context, path string, body any) (Map, error) {
 	var out Map
-	err := c.do(ctx, http.MethodPost, path, body, &out, false)
+	err := c.do(ctx, http.MethodPost, path, body, &out, authModeDefault)
 	return out, err
 }
 
-func (c *Client) do(ctx context.Context, method, path string, body any, out any, skipAuth bool) error {
+func (c *Client) postPublicMap(ctx context.Context, path string, body any) (Map, error) {
+	var out Map
+	err := c.do(ctx, http.MethodPost, path, body, &out, authModeNone)
+	return out, err
+}
+
+func (c *Client) postBearerMap(ctx context.Context, path string, body any) (Map, error) {
+	var out Map
+	err := c.do(ctx, http.MethodPost, path, body, &out, authModeBearer)
+	return out, err
+}
+
+type authMode int
+
+const (
+	authModeDefault authMode = iota
+	authModeNone
+	authModeBearer
+)
+
+func boolAuthMode(skipAuth bool) authMode {
+	if skipAuth {
+		return authModeNone
+	}
+	return authModeDefault
+}
+
+func (c *Client) do(ctx context.Context, method, path string, body any, out any, mode authMode) error {
 	var reader io.Reader
 	if body != nil {
 		payload, err := json.Marshal(body)
@@ -139,8 +189,14 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any,
 	if requestID := RequestIDFromContext(ctx); requestID != "" && req.Header.Get("X-Request-ID") == "" {
 		req.Header.Set("X-Request-ID", requestID)
 	}
-	if c.APIKey != "" && !skipAuth {
+	switch {
+	case mode == authModeNone:
+	case mode == authModeBearer && c.AccessToken != "":
+		req.Header.Set("Authorization", "Bearer "+c.AccessToken)
+	case c.APIKey != "":
 		req.Header.Set("X-Plystra-API-Key", c.APIKey)
+	case c.AccessToken != "":
+		req.Header.Set("Authorization", "Bearer "+c.AccessToken)
 	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {

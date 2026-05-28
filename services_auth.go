@@ -2,6 +2,30 @@ package plystra
 
 import "context"
 
+func (s AuthService) Register(ctx context.Context, input AuthRegisterInput) (Map, error) {
+	return s.client.postPublicMap(ctx, "/api/v1/auth/register", input)
+}
+
+func (s AuthService) Login(ctx context.Context, input AuthLoginInput) (Map, error) {
+	return s.client.postPublicMap(ctx, "/api/v1/auth/login", input)
+}
+
+func (s AuthService) Refresh(ctx context.Context, refreshToken string) (Map, error) {
+	return s.client.postPublicMap(ctx, "/api/v1/auth/refresh", AuthRefreshInput{RefreshToken: refreshToken})
+}
+
+func (s AuthService) Logout(ctx context.Context, refreshToken string) (Map, error) {
+	return s.client.postPublicMap(ctx, "/api/v1/auth/logout", AuthLogoutInput{RefreshToken: refreshToken})
+}
+
+func (s ActorService) Context(ctx context.Context) (Map, error) {
+	return s.client.getBearerMap(ctx, "/api/v1/actor/context", nil)
+}
+
+func (s ActorService) SwitchMember(ctx context.Context, input SwitchMemberInput) (Map, error) {
+	return s.client.postBearerMap(ctx, "/api/v1/actor/switch-member", input)
+}
+
 func (s SystemService) Version(ctx context.Context) (Map, error) {
 	return s.client.getMap(ctx, "/api/v1/version", nil, true)
 }
